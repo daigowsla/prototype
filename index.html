@@ -25,7 +25,8 @@
     html,
     body {
       margin: 0;
-      min-height: 100%;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
       background: #f4ead6;
       color: var(--ink);
@@ -37,7 +38,11 @@
     }
 
     body {
-      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      position: fixed;
+      inset: 0;
+      height: 100vh;
+      height: 100dvh;
+      padding: 0;
       background:
         radial-gradient(circle at 18% 12%, rgba(129, 177, 112, 0.28), transparent 24%),
         radial-gradient(circle at 82% 88%, rgba(218, 172, 91, 0.28), transparent 25%),
@@ -45,15 +50,18 @@
     }
 
     .app {
-      width: min(100vw, 520px);
-      height: 100vh;
-      height: 100dvh;
-      min-height: 560px;
+      width: min(100%, 520px);
+      height: 100%;
+      min-height: 0;
       margin: 0 auto;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
-      gap: 8px;
-      padding: 10px 10px 12px;
+      gap: 6px;
+      padding:
+        calc(7px + env(safe-area-inset-top))
+        calc(7px + env(safe-area-inset-right))
+        calc(8px + env(safe-area-inset-bottom))
+        calc(7px + env(safe-area-inset-left));
     }
 
     .topbar {
@@ -65,8 +73,8 @@
 
     .scorebox,
     .nextbox {
-      min-height: 64px;
-      padding: 8px 10px;
+      min-height: 56px;
+      padding: 6px 8px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--panel);
@@ -98,7 +106,7 @@
     }
 
     .nextbox {
-      width: 78px;
+      width: 70px;
       display: grid;
       justify-items: center;
       align-content: center;
@@ -106,14 +114,14 @@
     }
 
     #nextPreview {
-      width: 40px;
-      height: 40px;
+      width: 34px;
+      height: 34px;
       object-fit: contain;
       filter: drop-shadow(0 4px 5px rgba(51, 39, 31, 0.24));
     }
 
     .icon-button {
-      width: 48px;
+      width: 42px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: rgba(255, 255, 255, 0.82);
@@ -189,7 +197,7 @@
     }
 
     .rankbox {
-      padding: 8px 10px;
+      padding: 6px 8px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--panel);
@@ -197,7 +205,7 @@
       grid-template-columns: auto 1fr;
       gap: 7px 10px;
       align-items: center;
-      min-height: 60px;
+      min-height: 52px;
     }
 
     .rankbox h2 {
@@ -209,15 +217,15 @@
 
     .rank-list {
       display: flex;
-      gap: 7px;
+      gap: 5px;
       align-items: center;
       overflow: hidden;
       min-width: 0;
     }
 
     .rank-item {
-      min-width: 48px;
-      padding: 4px 6px;
+      min-width: 42px;
+      padding: 3px 5px;
       border-radius: 6px;
       background: rgba(47, 143, 107, 0.12);
       text-align: center;
@@ -243,7 +251,7 @@
     }
 
     .primary-button {
-      min-width: 92px;
+      min-width: 78px;
       border: 0;
       border-radius: 8px;
       background: var(--accent);
@@ -298,21 +306,36 @@
       cursor: pointer;
     }
 
-    @media (max-height: 650px) {
+    @media (max-height: 740px) {
       .app {
-        min-height: 500px;
-        gap: 6px;
-        padding: 7px;
+        gap: 4px;
+        padding:
+          calc(5px + env(safe-area-inset-top))
+          calc(5px + env(safe-area-inset-right))
+          calc(6px + env(safe-area-inset-bottom))
+          calc(5px + env(safe-area-inset-left));
       }
 
       .scorebox,
       .nextbox {
-        min-height: 54px;
-        padding: 6px 8px;
+        min-height: 48px;
+        padding: 5px 7px;
       }
 
       .rankbox {
-        min-height: 50px;
+        min-height: 46px;
+      }
+
+      .metric strong {
+        font-size: 20px;
+      }
+
+      .rank-place {
+        font-size: 10px;
+      }
+
+      .rank-score {
+        font-size: 12px;
       }
     }
   </style>
@@ -501,6 +524,10 @@
         }, { passive: false });
 
         window.addEventListener("resize", resize);
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener("resize", resize);
+          window.visualViewport.addEventListener("scroll", resize);
+        }
         restartButton.addEventListener("click", restart);
         againButton.addEventListener("click", restart);
         muteButton.addEventListener("click", function () {
