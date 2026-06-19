@@ -202,30 +202,32 @@
       border-radius: 8px;
       background: var(--panel);
       display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 7px 10px;
+      grid-template-columns: 1fr;
+      gap: 3px;
       align-items: center;
       min-height: 52px;
+      min-width: 0;
     }
 
     .rankbox h2 {
       margin: 0;
-      font-size: 13px;
-      line-height: 1.2;
-      grid-row: span 2;
+      font-size: 10px;
+      line-height: 1;
+      letter-spacing: 0;
     }
 
     .rank-list {
-      display: flex;
-      gap: 5px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 4px;
       align-items: center;
-      overflow: hidden;
+      width: 100%;
       min-width: 0;
     }
 
     .rank-item {
-      min-width: 42px;
-      padding: 3px 5px;
+      min-width: 0;
+      padding: 3px 2px;
       border-radius: 6px;
       background: rgba(47, 143, 107, 0.12);
       text-align: center;
@@ -234,7 +236,7 @@
 
     .rank-place {
       display: block;
-      font-size: 11px;
+      font-size: 10px;
       line-height: 1.1;
       color: rgba(42, 33, 27, 0.62);
       font-weight: 800;
@@ -244,14 +246,14 @@
     .rank-score {
       display: block;
       margin-top: 2px;
-      font-size: 13px;
+      font-size: 12px;
       line-height: 1.1;
       font-weight: 800;
       white-space: nowrap;
     }
 
     .primary-button {
-      min-width: 78px;
+      min-width: 68px;
       border: 0;
       border-radius: 8px;
       background: var(--accent);
@@ -727,7 +729,6 @@
         var ctx = render.context;
         var bodies = Composite.allBodies(engine.world);
         ctx.save();
-        ctx.scale(render.options.pixelRatio, render.options.pixelRatio);
         for (var i = 0; i < bodies.length; i++) {
           var body = bodies[i];
           if (!body.plugin || !body.plugin.level) continue;
@@ -788,7 +789,6 @@
       function burst(x, y, color) {
         var ctx = render.context;
         ctx.save();
-        ctx.scale(render.options.pixelRatio, render.options.pixelRatio);
         for (var i = 0; i < 10; i++) {
           ctx.beginPath();
           ctx.arc(x + Math.cos(i) * 18, y + Math.sin(i * 1.7) * 18, 3 + (i % 3), 0, Math.PI * 2);
