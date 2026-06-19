@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>塊根スイカゲーム</title>
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --soil: #33271f;
+      --ink: #2a211b;
+      --panel: rgba(255, 255, 255, 0.84);
+      --line: rgba(42, 33, 27, 0.16);
+      --accent: #2f8f6b;
+      --danger: #d84c3f;
+      --gold: #d79b38;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      overflow: hidden;
+      background: #f4ead6;
+      color: var(--ink);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+      letter-spacing: 0;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    body {
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      background:
+        radial-gradient(circle at 18% 12%, rgba(129, 177, 112, 0.28), transparent 24%),
+        radial-gradient(circle at 82% 88%, rgba(218, 172, 91, 0.28), transparent 25%),
+        linear-gradient(145deg, #fff8e8 0%, #ead9bc 52%, #d8c29d 100%);
+    }
+
+    .app {
+      width: min(100vw, 520px);
+      height: 100vh;
+      height: 100dvh;
+      min-height: 560px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 8px;
+      padding: 10px 10px 12px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .scorebox,
+    .nextbox {
+      min-height: 64px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 8px 24px rgba(51, 39, 31, 0.10);
+      backdrop-filter: blur(8px);
+    }
+
+    .scorebox {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .metric span,
+    .nextbox span {
+      display: block;
+      font-size: 11px;
+      line-height: 1.2;
+      color: rgba(42, 33, 27, 0.64);
+      white-space: nowrap;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 3px;
+      font-size: clamp(20px, 5.5vw, 28px);
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .nextbox {
+      width: 78px;
+      display: grid;
+      justify-items: center;
+      align-content: center;
+      gap: 3px;
+    }
+
+    #nextPreview {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 5px rgba(51, 39, 31, 0.24));
+    }
+
+    .icon-button {
+      width: 48px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.82);
+      color: var(--ink);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(51, 39, 31, 0.10);
+    }
+
+    .stage {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      border: 2px solid rgba(51, 39, 31, 0.82);
+      border-radius: 8px;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
+        url("background.png") center / cover no-repeat,
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 36px),
+        linear-gradient(#735139 0%, #4a3528 52%, #2e221b 100%);
+      box-shadow: inset 0 -24px 40px rgba(0, 0, 0, 0.22), 0 12px 36px rgba(51, 39, 31, 0.18);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .drop-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      transform: translateX(-1px);
+      background: linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.08));
+      pointer-events: none;
+    }
+
+    .ghost {
+      position: absolute;
+      top: 16px;
+      transform: translate(-50%, 0);
+      pointer-events: none;
+      filter: drop-shadow(0 7px 7px rgba(0, 0, 0, 0.22));
+    }
+
+    .danger-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 96px;
+      border-top: 2px dashed rgba(255, 238, 203, 0.82);
+      pointer-events: none;
+    }
+
+    .danger-line::after {
+      content: "GAME OVER LINE";
+      position: absolute;
+      right: 8px;
+      top: -20px;
+      font-size: 10px;
+      color: rgba(255, 238, 203, 0.88);
+      font-weight: 700;
+    }
+
+    .bottom {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .rankbox {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 7px 10px;
+      align-items: center;
+      min-height: 60px;
+    }
+
+    .rankbox h2 {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.2;
+      grid-row: span 2;
+    }
+
+    .rank-list {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .rank-item {
+      min-width: 48px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: rgba(47, 143, 107, 0.12);
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .rank-place {
+      display: block;
+      font-size: 11px;
+      line-height: 1.1;
+      color: rgba(42, 33, 27, 0.62);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .rank-score {
+      display: block;
+      margin-top: 2px;
+      font-size: 13px;
+      line-height: 1.1;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .primary-button {
+      min-width: 92px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(47, 143, 107, 0.26);
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 22px;
+      background: rgba(35, 26, 20, 0.56);
+      backdrop-filter: blur(5px);
+      z-index: 4;
+    }
+
+    .overlay.active {
+      display: grid;
+    }
+
+    .dialog {
+      width: min(100%, 330px);
+      border-radius: 8px;
+      background: #fff9ec;
+      padding: 18px;
+      text-align: center;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+    }
+
+    .dialog h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+    }
+
+    .dialog p {
+      margin: 0 0 14px;
+      color: rgba(42, 33, 27, 0.72);
+    }
+
+    .dialog button {
+      width: 100%;
+      height: 46px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--danger);
+      color: white;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    @media (max-height: 650px) {
+      .app {
+        min-height: 500px;
+        gap: 6px;
+        padding: 7px;
+      }
+
+      .scorebox,
+      .nextbox {
+        min-height: 54px;
+        padding: 6px 8px;
+      }
+
+      .rankbox {
+        min-height: 50px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="topbar" aria-label="スコア">
+      <div class="scorebox">
+        <div class="metric">
+          <span>SCORE</span>
+          <strong id="score">0</strong>
+        </div>
+        <div class="metric">
+          <span>BEST</span>
+          <strong id="best">0</strong>
+        </div>
+      </div>
+      <div class="nextbox">
+        <span>NEXT</span>
+        <img id="nextPreview" alt="">
+      </div>
+      <button class="icon-button" id="muteButton" type="button" title="音">
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 10v4h4l5 4V6L8 10H4Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M16 9c1.2 1.6 1.2 4.4 0 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </section>
+
+    <section class="stage" id="stage" aria-label="ゲーム画面">
+      <div class="danger-line"></div>
+      <div class="drop-line" id="dropLine"></div>
+      <canvas id="game"></canvas>
+      <canvas class="ghost" id="ghost"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="dialog">
+          <h1>GAME OVER</h1>
+          <p id="finalScore">SCORE 0</p>
+          <button id="againButton" type="button">もう一度</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="bottom">
+      <div class="rankbox">
+        <h2>RANKING</h2>
+        <div class="rank-list" id="ranking"></div>
+      </div>
+      <button class="primary-button" id="restartButton" type="button">RESET</button>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var IMAGE_FILES = [
+        "1.png", "2.png", "3.png", "4.png", "5.png", "6.png",
+        "7.png", "8.png", "9.png", "10.png", "11.png", "12.png"
+      ];
+      var LABELS = ["実生", "豆鉢", "芋芽", "丸芋", "双葉", "太根", "陶器鉢", "古株", "怪根", "王冠", "巨塊根", "神株"];
+      var COLORS = ["#a7d983", "#78c08d", "#55ad91", "#d8b25b", "#c98744", "#b96b49", "#9e5b4e", "#7f674d", "#5f7f68", "#8b6ca8", "#ca6f7e", "#f1b947"];
+      var RADII = [28, 34, 42, 52, 64, 78, 94, 111, 127, 140, 149, 156];
+      var SCORES = [1, 3, 6, 10, 15, 21, 30, 45, 66, 96, 140, 220];
+      var STORAGE_KEY = "caudex-suika-ranking-v1";
+      var BEST_KEY = "caudex-suika-best-v1";
+
+      var stage = document.getElementById("stage");
+      var canvas = document.getElementById("game");
+      var ghostCanvas = document.getElementById("ghost");
+      var ghostCtx = ghostCanvas.getContext("2d");
+      var dropLine = document.getElementById("dropLine");
+      var overlay = document.getElementById("overlay");
+      var scoreEl = document.getElementById("score");
+      var bestEl = document.getElementById("best");
+      var finalScoreEl = document.getElementById("finalScore");
+      var rankingEl = document.getElementById("ranking");
+      var nextPreview = document.getElementById("nextPreview");
+      var restartButton = document.getElementById("restartButton");
+      var againButton = document.getElementById("againButton");
+      var muteButton = document.getElementById("muteButton");
+
+      var engine;
+      var runner;
+      var render;
+      var walls = [];
+      var width = 0;
+      var height = 0;
+      var dropX = 0;
+      var currentLevel = 1;
+      var nextLevel = 1;
+      var score = 0;
+      var best = Number(localStorage.getItem(BEST_KEY) || 0);
+      var isGameOver = false;
+      var canDrop = true;
+      var muted = false;
+      var mergePairs = Object.create(null);
+      var images = [];
+      var audioCtx = null;
+
+      if (!window.Matter) {
+        document.body.innerHTML = "<div style='min-height:100vh;display:grid;place-items:center;padding:24px;font-family:system-ui;text-align:center;background:#fff8e8;color:#2a211b'><div><h1>Matter.jsを読み込めませんでした</h1><p>インターネット接続後にこのHTMLを開いてください。</p></div></div>";
+        return;
+      }
+
+      var Engine = Matter.Engine;
+      var Render = Matter.Render;
+      var Runner = Matter.Runner;
+      var Bodies = Matter.Bodies;
+      var Body = Matter.Body;
+      var Composite = Matter.Composite;
+      var Events = Matter.Events;
+
+      preloadImages();
+      setupPreviewFallback();
+      init();
+
+      function init() {
+        score = 0;
+        isGameOver = false;
+        canDrop = true;
+        mergePairs = Object.create(null);
+        overlay.classList.remove("active");
+        scoreEl.textContent = "0";
+        bestEl.textContent = String(best);
+        currentLevel = randomStartLevel();
+        nextLevel = randomStartLevel();
+        updateNextPreview();
+        createWorld();
+        resize();
+        bindEventsOnce();
+        updateRanking();
+        drawGhost();
+      }
+
+      function createWorld() {
+        if (runner) {
+          Runner.stop(runner);
+        }
+        if (render) {
+          Render.stop(render);
+        }
+
+        engine = Engine.create({
+          gravity: { x: 0, y: 1.05, scale: 0.0012 },
+          positionIterations: 8,
+          velocityIterations: 6
+        });
+
+        render = Render.create({
+          canvas: canvas,
+          engine: engine,
+          options: {
+            width: 360,
+            height: 560,
+            wireframes: false,
+            background: "transparent",
+            pixelRatio: Math.min(window.devicePixelRatio || 1, 2)
+          }
+        });
+
+        runner = Runner.create();
+        Render.run(render);
+        Runner.run(runner, engine);
+
+        Events.on(engine, "collisionStart", onCollisionStart);
+        Events.on(render, "afterRender", drawBodies);
+        Events.on(engine, "afterUpdate", checkGameOver);
+      }
+
+      function bindEventsOnce() {
+        if (stage.dataset.bound) return;
+        stage.dataset.bound = "1";
+
+        stage.addEventListener("pointermove", function (event) {
+          if (isGameOver) return;
+          setDropFromEvent(event);
+        }, { passive: false });
+
+        stage.addEventListener("pointerdown", function (event) {
+          event.preventDefault();
+          if (isGameOver) return;
+          unlockAudio();
+          setDropFromEvent(event);
+          dropCurrent();
+        }, { passive: false });
+
+        window.addEventListener("resize", resize);
+        restartButton.addEventListener("click", restart);
+        againButton.addEventListener("click", restart);
+        muteButton.addEventListener("click", function () {
+          muted = !muted;
+          muteButton.style.color = muted ? "var(--ink)" : "var(--accent)";
+          if (!muted) playTone(260, 0.05);
+        });
+
+        muteButton.style.color = "var(--accent)";
+      }
+
+      function resize() {
+        var rect = stage.getBoundingClientRect();
+        width = Math.floor(rect.width);
+        height = Math.floor(rect.height);
+        dropX = clamp(dropX || width / 2, currentRadius() + 8, width - currentRadius() - 8);
+
+        render.options.width = width;
+        render.options.height = height;
+        render.canvas.width = Math.floor(width * render.options.pixelRatio);
+        render.canvas.height = Math.floor(height * render.options.pixelRatio);
+        render.canvas.style.width = width + "px";
+        render.canvas.style.height = height + "px";
+        render.bounds.max.x = width;
+        render.bounds.max.y = height;
+
+        Composite.remove(engine.world, walls);
+        walls = [
+          Bodies.rectangle(width / 2, height + 30, width + 80, 60, wallOptions()),
+          Bodies.rectangle(-30, height / 2, 60, height + 160, wallOptions()),
+          Bodies.rectangle(width + 30, height / 2, 60, height + 160, wallOptions())
+        ];
+        Composite.add(engine.world, walls);
+        updateAim();
+      }
+
+      function wallOptions() {
+        return {
+          isStatic: true,
+          friction: 0.82,
+          restitution: 0,
+          render: { visible: false }
+        };
+      }
+
+      function setDropFromEvent(event) {
+        var rect = stage.getBoundingClientRect();
+        dropX = clamp(event.clientX - rect.left, currentRadius() + 8, width - currentRadius() - 8);
+        updateAim();
+      }
+
+      function updateAim() {
+        dropLine.style.left = dropX + "px";
+        drawGhost();
+      }
+
+      function drawGhost() {
+        var r = currentRadius();
+        var size = Math.ceil(r * 2.2);
+        ghostCanvas.width = size;
+        ghostCanvas.height = size;
+        ghostCanvas.style.width = size + "px";
+        ghostCanvas.style.height = size + "px";
+        ghostCanvas.style.left = dropX + "px";
+        drawPlant(ghostCtx, size / 2, size / 2, r, currentLevel, 0.82);
+      }
+
+      function dropCurrent() {
+        if (!canDrop || isGameOver) return;
+        canDrop = false;
+        var level = currentLevel;
+        var r = RADII[level - 1];
+        var body = Bodies.circle(dropX, 32 + r, r, {
+          label: "plant",
+          restitution: 0.12,
+          friction: 0.55,
+          frictionAir: 0.012,
+          density: 0.00072 + level * 0.000035,
+          render: { visible: false }
+        });
+        body.plugin = { level: level, bornAt: Date.now() };
+        Composite.add(engine.world, body);
+        playTone(180 + level * 18, 0.045);
+
+        currentLevel = nextLevel;
+        nextLevel = randomStartLevel();
+        updateNextPreview();
+        updateAim();
+        setTimeout(function () {
+          canDrop = true;
+        }, 470);
+      }
+
+      function onCollisionStart(event) {
+        if (isGameOver) return;
+        var pairs = event.pairs;
+        for (var i = 0; i < pairs.length; i++) {
+          var a = pairs[i].bodyA;
+          var b = pairs[i].bodyB;
+          if (!a.plugin || !b.plugin) continue;
+          if (a.plugin.level !== b.plugin.level) continue;
+          scheduleMerge(a, b);
+        }
+      }
+
+      function scheduleMerge(a, b) {
+        if (a.isSleeping || b.isSleeping) return;
+        var id = a.id < b.id ? a.id + "-" + b.id : b.id + "-" + a.id;
+        if (mergePairs[id]) return;
+        mergePairs[id] = true;
+        setTimeout(function () {
+          delete mergePairs[id];
+          if (!Composite.get(engine.world, a.id, "body") || !Composite.get(engine.world, b.id, "body")) return;
+          if (a.plugin.level !== b.plugin.level) return;
+          mergeBodies(a, b);
+        }, 20);
+      }
+
+      function mergeBodies(a, b) {
+        var level = a.plugin.level;
+        var x = (a.position.x + b.position.x) / 2;
+        var y = (a.position.y + b.position.y) / 2;
+        var vx = (a.velocity.x + b.velocity.x) / 2;
+        var vy = (a.velocity.y + b.velocity.y) / 2;
+        Composite.remove(engine.world, [a, b]);
+
+        if (level >= 12) {
+          addScore(SCORES[11] * 3);
+          burst(x, y, COLORS[11]);
+          playBubblePop(level);
+          return;
+        }
+
+        var next = level + 1;
+        var body = Bodies.circle(x, y, RADII[next - 1], {
+          label: "plant",
+          restitution: 0.1,
+          friction: 0.56,
+          frictionAir: 0.012,
+          density: 0.00072 + next * 0.000035,
+          render: { visible: false }
+        });
+        body.plugin = { level: next, bornAt: Date.now() };
+        Body.setVelocity(body, { x: vx * 0.45, y: vy * 0.45 - 1.2 });
+        Composite.add(engine.world, body);
+        addScore(SCORES[next - 1]);
+        burst(x, y, COLORS[next - 1]);
+        playBubblePop(next);
+      }
+
+      function addScore(points) {
+        score += points;
+        scoreEl.textContent = String(score);
+        if (score > best) {
+          best = score;
+          bestEl.textContent = String(best);
+          localStorage.setItem(BEST_KEY, String(best));
+        }
+      }
+
+      function checkGameOver() {
+        if (isGameOver) return;
+        var bodies = Composite.allBodies(engine.world);
+        var now = Date.now();
+        var line = 96;
+        var dangerCount = 0;
+        for (var i = 0; i < bodies.length; i++) {
+          var body = bodies[i];
+          if (!body.plugin || body.plugin.level < 1) continue;
+          if (now - body.plugin.bornAt < 2100) continue;
+          if (body.position.y - RADII[body.plugin.level - 1] < line && Math.abs(body.velocity.y) < 0.38) {
+            dangerCount++;
+          }
+        }
+        if (dangerCount >= 2) {
+          endGame();
+        }
+      }
+
+      function endGame() {
+        isGameOver = true;
+        canDrop = false;
+        finalScoreEl.textContent = "SCORE " + score;
+        saveRanking(score);
+        updateRanking();
+        overlay.classList.add("active");
+        playTone(120, 0.18);
+      }
+
+      function restart() {
+        Composite.clear(engine.world, false);
+        walls = [];
+        init();
+      }
+
+      function drawBodies() {
+        var ctx = render.context;
+        var bodies = Composite.allBodies(engine.world);
+        ctx.save();
+        ctx.scale(render.options.pixelRatio, render.options.pixelRatio);
+        for (var i = 0; i < bodies.length; i++) {
+          var body = bodies[i];
+          if (!body.plugin || !body.plugin.level) continue;
+          ctx.save();
+          ctx.translate(body.position.x, body.position.y);
+          ctx.rotate(body.angle);
+          drawPlant(ctx, 0, 0, RADII[body.plugin.level - 1], body.plugin.level, 1);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+
+      function drawPlant(ctx, x, y, r, level, alpha) {
+        var img = images[level - 1];
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        if (img && img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, x - r, y - r, r * 2, r * 2);
+          ctx.restore();
+          return;
+        }
+
+        var color = COLORS[level - 1];
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.lineWidth = Math.max(2, r * 0.08);
+        ctx.strokeStyle = "rgba(48, 35, 27, 0.34)";
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.ellipse(x - r * 0.22, y + r * 0.04, r * 0.34, r * 0.52, -0.22, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,255,0.18)";
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.15, y - r * 0.76);
+        ctx.quadraticCurveTo(x + r * 0.02, y - r * 1.08, x + r * 0.22, y - r * 0.76);
+        ctx.strokeStyle = "rgba(38, 96, 54, 0.94)";
+        ctx.lineWidth = Math.max(2, r * 0.08);
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.ellipse(x + r * 0.30, y - r * 0.86, r * 0.28, r * 0.13, -0.42, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(82, 151, 73, 0.95)";
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(42, 33, 27, 0.76)";
+        ctx.font = "700 " + Math.max(12, r * 0.38) + "px system-ui";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(level), x, y + r * 0.08);
+        ctx.restore();
+      }
+
+      function burst(x, y, color) {
+        var ctx = render.context;
+        ctx.save();
+        ctx.scale(render.options.pixelRatio, render.options.pixelRatio);
+        for (var i = 0; i < 10; i++) {
+          ctx.beginPath();
+          ctx.arc(x + Math.cos(i) * 18, y + Math.sin(i * 1.7) * 18, 3 + (i % 3), 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function preloadImages() {
+        for (var i = 0; i < IMAGE_FILES.length; i++) {
+          var img = new Image();
+          img.decoding = "async";
+          img.src = IMAGE_FILES[i];
+          images.push(img);
+        }
+      }
+
+      function setupPreviewFallback() {
+        nextPreview.onerror = function () {
+          var c = document.createElement("canvas");
+          c.width = 80;
+          c.height = 80;
+          drawPlant(c.getContext("2d"), 40, 40, 31, nextLevel, 1);
+          nextPreview.src = c.toDataURL("image/png");
+        };
+      }
+
+      function updateNextPreview() {
+        nextPreview.alt = LABELS[nextLevel - 1];
+        nextPreview.src = IMAGE_FILES[nextLevel - 1];
+        setTimeout(function () {
+          if (!nextPreview.complete || nextPreview.naturalWidth === 0) {
+            var c = document.createElement("canvas");
+            c.width = 80;
+            c.height = 80;
+            drawPlant(c.getContext("2d"), 40, 40, 31, nextLevel, 1);
+            nextPreview.src = c.toDataURL("image/png");
+          }
+        }, 60);
+      }
+
+      function saveRanking(value) {
+        if (!value) return;
+        var ranks = getRanking();
+        ranks.push(value);
+        ranks.sort(function (a, b) { return b - a; });
+        ranks = ranks.slice(0, 5);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(ranks));
+      }
+
+      function getRanking() {
+        try {
+          var parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+          return Array.isArray(parsed) ? parsed.map(Number).filter(function (n) { return n > 0; }) : [];
+        } catch (error) {
+          return [];
+        }
+      }
+
+      function updateRanking() {
+        var ranks = getRanking();
+        rankingEl.innerHTML = "";
+        for (var i = 0; i < 5; i++) {
+          var div = document.createElement("div");
+          var place = document.createElement("span");
+          var value = document.createElement("span");
+          div.className = "rank-item";
+          place.className = "rank-place";
+          value.className = "rank-score";
+          place.textContent = ordinal(i + 1);
+          value.textContent = ranks[i] || "-";
+          div.appendChild(place);
+          div.appendChild(value);
+          rankingEl.appendChild(div);
+        }
+      }
+
+      function ordinal(rank) {
+        if (rank === 1) return "1st";
+        if (rank === 2) return "2nd";
+        if (rank === 3) return "3rd";
+        return rank + "th";
+      }
+
+      function randomStartLevel() {
+        var n = Math.random();
+        if (n < 0.52) return 1;
+        if (n < 0.82) return 2;
+        if (n < 0.96) return 3;
+        return 4;
+      }
+
+      function currentRadius() {
+        return RADII[currentLevel - 1];
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function playTone(freq, duration) {
+        if (muted) return;
+        try {
+          unlockAudio();
+          var osc = audioCtx.createOscillator();
+          var gain = audioCtx.createGain();
+          osc.frequency.value = freq;
+          osc.type = "sine";
+          gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.04, audioCtx.currentTime + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + duration + 0.02);
+        } catch (error) {}
+      }
+
+      function playBubblePop(level) {
+        if (muted) return;
+        try {
+          unlockAudio();
+          var now = audioCtx.currentTime;
+          var osc = audioCtx.createOscillator();
+          var pitch = 430 + level * 26;
+          var gain = audioCtx.createGain();
+
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(pitch * 1.75, now);
+          osc.frequency.exponentialRampToValueAtTime(pitch * 0.62, now + 0.075);
+          gain.gain.setValueAtTime(0.0001, now);
+          gain.gain.exponentialRampToValueAtTime(0.09, now + 0.006);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.115);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.13);
+
+          var sampleRate = audioCtx.sampleRate;
+          var length = Math.floor(sampleRate * 0.09);
+          var buffer = audioCtx.createBuffer(1, length, sampleRate);
+          var data = buffer.getChannelData(0);
+          for (var i = 0; i < length; i++) {
+            var t = i / length;
+            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 4);
+          }
+
+          var noise = audioCtx.createBufferSource();
+          var noiseGain = audioCtx.createGain();
+          var filter = audioCtx.createBiquadFilter();
+          noise.buffer = buffer;
+          filter.type = "bandpass";
+          filter.frequency.setValueAtTime(1150 + level * 58, now);
+          filter.Q.setValueAtTime(1.8, now);
+          noiseGain.gain.setValueAtTime(0.0001, now);
+          noiseGain.gain.exponentialRampToValueAtTime(0.055, now + 0.004);
+          noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.085);
+          noise.connect(filter);
+          filter.connect(noiseGain);
+          noiseGain.connect(audioCtx.destination);
+          noise.start(now);
+          noise.stop(now + 0.095);
+        } catch (error) {}
+      }
+
+      function unlockAudio() {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+      }
+    })();
+  </script>
+</body>
+</html>
