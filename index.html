@@ -33,6 +33,8 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
       letter-spacing: 0;
       touch-action: none;
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
       -webkit-user-select: none;
       user-select: none;
     }
@@ -405,6 +407,7 @@
       var SCORES = [1, 3, 6, 10, 15, 21, 30, 45, 66, 96, 140, 220];
       var STORAGE_KEY = "caudex-suika-ranking-v1";
       var BEST_KEY = "caudex-suika-best-v1";
+      var FLOOR_INSET = 8;
 
       var stage = document.getElementById("stage");
       var canvas = document.getElementById("game");
@@ -531,6 +534,11 @@
           window.visualViewport.addEventListener("resize", resize);
           window.visualViewport.addEventListener("scroll", resize);
         }
+        window.addEventListener("gesturestart", preventBrowserZoom, { passive: false });
+        window.addEventListener("gesturechange", preventBrowserZoom, { passive: false });
+        window.addEventListener("gestureend", preventBrowserZoom, { passive: false });
+        document.addEventListener("dblclick", preventBrowserZoom, { passive: false });
+        document.addEventListener("touchend", preventDoubleTapZoom, { passive: false });
         restartButton.addEventListener("click", restart);
         againButton.addEventListener("click", restart);
         muteButton.addEventListener("click", function () {
@@ -559,7 +567,7 @@
 
         Composite.remove(engine.world, walls);
         walls = [
-          Bodies.rectangle(width / 2, height + 30, width + 80, 60, wallOptions()),
+          Bodies.rectangle(width / 2, height + 30 - FLOOR_INSET, width + 80, 60, wallOptions()),
           Bodies.rectangle(-30, height / 2, 60, height + 160, wallOptions()),
           Bodies.rectangle(width + 30, height / 2, 60, height + 160, wallOptions())
         ];
@@ -581,6 +589,20 @@
         var pointerX = (event.clientX - rect.left) * (width / rect.width);
         dropX = clamp(pointerX, currentRadius() + 8, width - currentRadius() - 8);
         updateAim();
+      }
+
+      var lastTouchEnd = 0;
+
+      function preventBrowserZoom(event) {
+        event.preventDefault();
+      }
+
+      function preventDoubleTapZoom(event) {
+        var now = Date.now();
+        if (now - lastTouchEnd <= 360) {
+          event.preventDefault();
+        }
+        lastTouchEnd = now;
       }
 
       function updateAim() {
