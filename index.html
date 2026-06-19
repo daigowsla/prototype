@@ -441,6 +441,8 @@
       var mergePairs = Object.create(null);
       var images = [];
       var audioCtx = null;
+      var audioReady = false;
+      var audioPrimed = false;
 
       if (!window.Matter) {
         document.body.innerHTML = "<div style='min-height:100vh;display:grid;place-items:center;padding:24px;font-family:system-ui;text-align:center;background:#fff8e8;color:#2a211b'><div><h1>Matter.jsを読み込めませんでした</h1><p>インターネット接続後にこのHTMLを開いてください。</p></div></div>";
@@ -529,6 +531,8 @@
           dropCurrent();
         }, { passive: false });
 
+        document.addEventListener("touchstart", unlockAudio, { passive: true });
+        document.addEventListener("pointerdown", unlockAudio, { passive: true });
         window.addEventListener("resize", resize);
         if (window.visualViewport) {
           window.visualViewport.addEventListener("resize", resize);
@@ -917,7 +921,7 @@
       function playTone(freq, duration) {
         if (muted) return;
         try {
-          unlockAudio();
+          if (!unlockAudio()) return;
           var osc = audioCtx.createOscillator();
           var gain = audioCtx.createGain();
           osc.frequency.value = freq;
@@ -935,7 +939,7 @@
       function playBubblePop(level) {
         if (muted) return;
         try {
-          unlockAudio();
+          if (!unlockAudio()) return;
           var now = audioCtx.currentTime;
           var osc = audioCtx.createOscillator();
           var pitch = 430 + level * 26;
@@ -980,10 +984,34 @@
       }
 
       function unlockAudio() {
-        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === "suspended") {
-          audioCtx.resume();
+        var AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtor) return false;
+
+        audioCtx = audioCtx || new AudioCtor();
+
+        if (!audioPrimed) {
+          audioPrimed = true;
+          try {
+            var buffer = audioCtx.createBuffer(1, 1, 22050);
+            var source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            source.start(0);
+          } catch (error) {}
         }
+
+        if (audioCtx.state === "suspended") {
+          var resumeResult = audioCtx.resume();
+          if (resumeResult && typeof resumeResult.then === "function") {
+            resumeResult.then(function () {
+              audioReady = audioCtx.state === "running";
+            }).catch(function () {});
+          }
+        } else {
+          audioReady = true;
+        }
+
+        return audioCtx.state === "running" || audioReady;
       }
     })();
   </script>
