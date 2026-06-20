@@ -1108,7 +1108,7 @@
 
         bgmGain = audioCtx.createGain();
         bgmGain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-        bgmGain.gain.exponentialRampToValueAtTime(0.095, audioCtx.currentTime + 0.35);
+        bgmGain.gain.exponentialRampToValueAtTime(0.19, audioCtx.currentTime + 0.35);
         bgmGain.connect(audioCtx.destination);
         bgmStep = 0;
         bgmNextTime = audioCtx.currentTime + 0.06;
