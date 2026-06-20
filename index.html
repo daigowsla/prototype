@@ -799,14 +799,14 @@
           if (now - body.plugin.bornAt < 1200 || body.speed > 0.18) continue;
 
           var phase = time * 0.72 + body.id * 0.83;
-          var force = body.mass * 0.000024;
+          var force = body.mass * 0.000020;
           Body.applyForce(body, body.position, {
             x: Math.sin(phase) * force,
             y: -Math.abs(Math.cos(phase * 0.61)) * force * 0.08
           });
 
           if (Math.abs(body.angularVelocity) < 0.004) {
-            Body.setAngularVelocity(body, Math.sin(phase * 0.87) * 0.0022);
+            Body.setAngularVelocity(body, Math.sin(phase * 0.87) * 0.0019);
           }
         }
       }
