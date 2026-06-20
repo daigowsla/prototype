@@ -464,6 +464,17 @@
       var audioCtx = null;
       var audioReady = false;
       var audioPrimed = false;
+      var bgmTimer = null;
+      var bgmGain = null;
+      var bgmStep = 0;
+      var bgmNextTime = 0;
+      var BGM_MELODY = [
+        659.25, 0, 783.99, 0, 880.00, 783.99, 659.25, 0,
+        587.33, 0, 659.25, 523.25, 0, 587.33, 659.25, 0,
+        698.46, 0, 880.00, 0, 783.99, 698.46, 659.25, 0,
+        587.33, 659.25, 523.25, 0, 493.88, 523.25, 587.33, 0
+      ];
+      var BGM_BASS = [261.63, 220.00, 246.94, 196.00];
       var standaloneMode = window.navigator.standalone === true ||
         window.matchMedia("(display-mode: standalone)").matches;
 
@@ -502,6 +513,7 @@
         bindEventsOnce();
         updateRanking();
         drawGhost();
+        startBgm();
       }
 
       function createWorld() {
@@ -570,12 +582,22 @@
         window.addEventListener("gestureend", preventBrowserZoom, { passive: false });
         document.addEventListener("dblclick", preventBrowserZoom, { passive: false });
         document.addEventListener("touchend", preventDoubleTapZoom, { passive: false });
+        document.addEventListener("visibilitychange", function () {
+          if (document.hidden) stopBgm();
+          else startBgm();
+        });
         restartButton.addEventListener("click", restart);
         againButton.addEventListener("click", restart);
         muteButton.addEventListener("click", function () {
           muted = !muted;
           muteButton.style.color = muted ? "var(--ink)" : "var(--accent)";
-          if (!muted) playTone(260, 0.05);
+          if (muted) {
+            stopBgm();
+          } else {
+            unlockAudio();
+            playTone(260, 0.05);
+            startBgm();
+          }
         });
 
         muteButton.style.color = "var(--accent)";
@@ -840,6 +862,7 @@
         saveRanking(score);
         updateRanking();
         overlay.classList.add("active");
+        stopBgm();
         playTone(120, 0.18);
       }
 
@@ -1079,6 +1102,67 @@
         } catch (error) {}
       }
 
+      function startBgm() {
+        if (muted || isGameOver || document.hidden || bgmTimer) return;
+        if (!audioCtx || audioCtx.state !== "running") return;
+
+        bgmGain = audioCtx.createGain();
+        bgmGain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+        bgmGain.gain.exponentialRampToValueAtTime(0.075, audioCtx.currentTime + 0.35);
+        bgmGain.connect(audioCtx.destination);
+        bgmStep = 0;
+        bgmNextTime = audioCtx.currentTime + 0.06;
+        scheduleBgm();
+        bgmTimer = window.setInterval(scheduleBgm, 120);
+      }
+
+      function stopBgm() {
+        if (bgmTimer) {
+          window.clearInterval(bgmTimer);
+          bgmTimer = null;
+        }
+        if (!bgmGain || !audioCtx) return;
+
+        var oldGain = bgmGain;
+        var now = audioCtx.currentTime;
+        oldGain.gain.cancelScheduledValues(now);
+        oldGain.gain.setValueAtTime(Math.max(0.0001, oldGain.gain.value), now);
+        oldGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+        bgmGain = null;
+        window.setTimeout(function () {
+          try { oldGain.disconnect(); } catch (error) {}
+        }, 500);
+      }
+
+      function scheduleBgm() {
+        if (!audioCtx || !bgmGain) return;
+        var stepDuration = 60 / 116 / 2;
+        while (bgmNextTime < audioCtx.currentTime + 0.55) {
+          var note = BGM_MELODY[bgmStep];
+          if (note) playBgmNote(note, bgmNextTime, stepDuration * 0.72, "triangle", 0.12);
+          if (bgmStep % 8 === 0) {
+            var bass = BGM_BASS[Math.floor(bgmStep / 8) % BGM_BASS.length];
+            playBgmNote(bass, bgmNextTime, stepDuration * 2.6, "sine", 0.075);
+          }
+          bgmNextTime += stepDuration;
+          bgmStep = (bgmStep + 1) % BGM_MELODY.length;
+        }
+      }
+
+      function playBgmNote(freq, startTime, duration, type, volume) {
+        var osc = audioCtx.createOscillator();
+        var gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, startTime);
+        gain.gain.setValueAtTime(0.0001, startTime);
+        gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.018);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        osc.connect(gain);
+        gain.connect(bgmGain);
+        osc.start(startTime);
+        osc.stop(startTime + duration + 0.03);
+      }
+
       function unlockAudio() {
         var AudioCtor = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtor) return false;
@@ -1101,10 +1185,12 @@
           if (resumeResult && typeof resumeResult.then === "function") {
             resumeResult.then(function () {
               audioReady = audioCtx.state === "running";
+              startBgm();
             }).catch(function () {});
           }
         } else {
           audioReady = true;
+          startBgm();
         }
 
         return audioCtx.state === "running" || audioReady;
