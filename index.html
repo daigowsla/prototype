@@ -394,7 +394,7 @@
       ];
       var LABELS = ["実生", "豆鉢", "芋芽", "丸芋", "双葉", "太根", "陶器鉢", "古株", "怪根", "王冠", "巨塊根", "神株"];
       var COLORS = ["#a7d983", "#78c08d", "#55ad91", "#d8b25b", "#c98744", "#b96b49", "#9e5b4e", "#7f674d", "#5f7f68", "#8b6ca8", "#ca6f7e", "#f1b947"];
-      var RADII = [28, 34, 41, 49, 58, 68, 79, 91, 103, 115, 127, 139];
+      var RADII = [28, 33, 38, 45, 52, 60, 69, 78, 88, 98, 107, 117];
       var SCORES = [1, 3, 6, 10, 15, 21, 30, 45, 66, 96, 140, 220];
       var STORAGE_KEY = "caudex-suika-ranking-v1";
       var BEST_KEY = "caudex-suika-best-v1";
@@ -434,6 +434,10 @@
       var canDrop = true;
       var muted = false;
       var mergePairs = Object.create(null);
+      var mergeEffects = [];
+      var comboCounts = Object.create(null);
+      var dropSerial = 0;
+      var activeDropId = 0;
       var images = [];
       var audioCtx = null;
       var audioReady = false;
@@ -476,6 +480,9 @@
         canDrop = true;
         dropX = 0;
         mergePairs = Object.create(null);
+        mergeEffects = [];
+        comboCounts = Object.create(null);
+        activeDropId = 0;
         overlay.classList.remove("active");
         scoreEl.textContent = "0";
         bestEl.textContent = String(best);
@@ -676,6 +683,8 @@
       function dropCurrent() {
         if (!canDrop || isGameOver) return;
         canDrop = false;
+        activeDropId = ++dropSerial;
+        comboCounts[activeDropId] = 0;
         var level = currentLevel;
         var r = RADII[level - 1];
         var body = Bodies.circle(dropX, 32 + r, r, {
@@ -686,9 +695,9 @@
           density: 0.00072 + level * 0.000035,
           render: { visible: false }
         });
-        body.plugin = { level: level, bornAt: Date.now() };
+        body.plugin = { level: level, bornAt: Date.now(), dropId: activeDropId };
         Composite.add(engine.world, body);
-        playTone(180 + level * 18, 0.045);
+        playDropClick();
 
         currentLevel = nextLevel;
         nextLevel = randomStartLevel();
@@ -730,11 +739,13 @@
         var y = (a.position.y + b.position.y) / 2;
         var vx = (a.velocity.x + b.velocity.x) / 2;
         var vy = (a.velocity.y + b.velocity.y) / 2;
+        var comboId = getComboDropId(a, b);
         Composite.remove(engine.world, [a, b]);
 
         if (level >= 12) {
-          addScore(SCORES[11] * 3);
-          burst(x, y, COLORS[11]);
+          var clearAward = getComboAward(SCORES[11] * 3, comboId);
+          addScore(clearAward.points);
+          burst(x, y, COLORS[11], clearAward.combo, clearAward.bonus);
           playBubblePop(level);
           return;
         }
@@ -748,12 +759,35 @@
           density: 0.00072 + next * 0.000035,
           render: { visible: false }
         });
-        body.plugin = { level: next, bornAt: Date.now() };
+        body.plugin = { level: next, bornAt: Date.now(), dropId: comboId };
         Body.setVelocity(body, { x: vx * 0.45, y: vy * 0.45 - 1.2 });
         Composite.add(engine.world, body);
-        addScore(SCORES[next - 1]);
-        burst(x, y, COLORS[next - 1]);
+        var award = getComboAward(SCORES[next - 1], comboId);
+        addScore(award.points);
+        burst(x, y, COLORS[next - 1], award.combo, award.bonus);
         playBubblePop(next);
+      }
+
+      function getComboDropId(a, b) {
+        if (activeDropId && comboCounts[activeDropId] !== undefined) return activeDropId;
+        return 0;
+      }
+
+      function getComboAward(basePoints, comboId) {
+        var combo = 1;
+        var bonus = 0;
+        if (comboId) {
+          comboCounts[comboId] = (comboCounts[comboId] || 0) + 1;
+          combo = comboCounts[comboId];
+          if (combo >= 2) {
+            bonus = Math.round(basePoints * Math.min(1, (combo - 1) * 0.2));
+          }
+        }
+        return {
+          points: basePoints + bonus,
+          combo: combo,
+          bonus: bonus
+        };
       }
 
       function addScore(points) {
@@ -842,6 +876,7 @@
           ctx.restore();
         }
         ctx.restore();
+        drawMergeEffects(ctx);
       }
 
       function drawPlant(ctx, x, y, r, level, alpha) {
@@ -889,16 +924,120 @@
         ctx.restore();
       }
 
-      function burst(x, y, color) {
-        var ctx = render.context;
-        ctx.save();
-        for (var i = 0; i < 10; i++) {
-          ctx.beginPath();
-          ctx.arc(x + Math.cos(i) * 18, y + Math.sin(i * 1.7) * 18, 3 + (i % 3), 0, Math.PI * 2);
-          ctx.fillStyle = color;
-          ctx.fill();
+      function burst(x, y, color, combo, bonus) {
+        var particles = [];
+        for (var i = 0; i < 14; i++) {
+          var angle = (Math.PI * 2 / 14) * i + Math.random() * 0.35;
+          var speed = 22 + Math.random() * 28;
+          particles.push({
+            angle: angle,
+            speed: speed,
+            size: 3 + Math.random() * 5,
+            drift: -8 - Math.random() * 16
+          });
         }
-        ctx.restore();
+        mergeEffects.push({
+          x: x,
+          y: y,
+          color: color,
+          combo: combo || 1,
+          bonus: bonus || 0,
+          startedAt: performance.now(),
+          popDuration: 520,
+          duration: combo >= 2 ? 950 : 520,
+          particles: particles
+        });
+      }
+
+      function drawMergeEffects(ctx) {
+        var now = performance.now();
+        for (var i = mergeEffects.length - 1; i >= 0; i--) {
+          var effect = mergeEffects[i];
+          var elapsed = now - effect.startedAt;
+          var progress = Math.min(1, elapsed / effect.popDuration);
+          if (elapsed >= effect.duration) {
+            mergeEffects.splice(i, 1);
+            continue;
+          }
+
+          var easeOut = 1 - Math.pow(1 - progress, 3);
+          var fade = 1 - progress;
+          var ringRadius = 18 + easeOut * 54;
+
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          ctx.globalAlpha = fade * 0.72;
+          ctx.lineWidth = 7 * fade + 1;
+          ctx.strokeStyle = "rgba(255, 246, 220, 0.88)";
+          ctx.beginPath();
+          ctx.arc(effect.x, effect.y, ringRadius, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.globalAlpha = fade * 0.32;
+          ctx.fillStyle = effect.color;
+          ctx.beginPath();
+          ctx.arc(effect.x, effect.y, 10 + easeOut * 34, 0, Math.PI * 2);
+          ctx.fill();
+
+          for (var p = 0; p < effect.particles.length; p++) {
+            var particle = effect.particles[p];
+            var distance = particle.speed * easeOut;
+            var px = effect.x + Math.cos(particle.angle) * distance;
+            var py = effect.y + Math.sin(particle.angle) * distance + particle.drift * progress;
+            var size = particle.size * (0.5 + fade * 0.9);
+
+            ctx.globalAlpha = fade * 0.78;
+            ctx.fillStyle = p % 2 ? "rgba(255, 251, 232, 0.92)" : effect.color;
+            ctx.beginPath();
+            ctx.arc(px, py, size, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          if (effect.combo >= 2) {
+            var textProgress = Math.min(1, elapsed / effect.duration);
+            var textFade = textProgress < 0.7 ? 1 : (1 - textProgress) / 0.3;
+            var textLift = 24 + textProgress * 20;
+            var label = effect.combo + "COMBO";
+            var pulse = Math.sin(Math.min(1, textProgress * 1.35) * Math.PI);
+            var fontSize = Math.round(13 + pulse * 2);
+            var labelWidth = Math.max(72, label.length * 8);
+            var labelHeight = 22;
+            var labelX = effect.x - labelWidth / 2;
+            var labelY = effect.y - textLift - labelHeight / 2;
+            ctx.globalCompositeOperation = "source-over";
+            ctx.globalAlpha = Math.max(0, Math.min(1, textFade));
+            ctx.fillStyle = "rgba(255, 252, 235, 0.92)";
+            roundedRect(ctx, labelX, labelY, labelWidth, labelHeight, 11);
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "rgba(255, 169, 173, 0.88)";
+            ctx.stroke();
+
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "900 " + fontSize + "px system-ui";
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+            ctx.fillStyle = "rgba(211, 83, 105, 0.98)";
+            ctx.strokeText(label, effect.x, effect.y - textLift);
+            ctx.fillText(label, effect.x, effect.y - textLift);
+          }
+          ctx.restore();
+        }
+      }
+
+      function roundedRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
       }
 
       function preloadImages() {
@@ -1008,6 +1147,75 @@
           gain.connect(audioCtx.destination);
           osc.start();
           osc.stop(audioCtx.currentTime + duration + 0.02);
+        } catch (error) {}
+      }
+
+      function playDropClick() {
+        if (muted) return;
+        try {
+          if (!unlockAudio()) return;
+          var now = audioCtx.currentTime;
+          var base = 460;
+
+          var bounce = audioCtx.createOscillator();
+          var wobble = audioCtx.createOscillator();
+          var bounceGain = audioCtx.createGain();
+          var wobbleGain = audioCtx.createGain();
+          var filter = audioCtx.createBiquadFilter();
+
+          filter.type = "lowpass";
+          filter.frequency.setValueAtTime(1700, now);
+          filter.Q.setValueAtTime(0.7, now);
+
+          bounce.type = "sine";
+          bounce.frequency.setValueAtTime(base * 0.72, now);
+          bounce.frequency.exponentialRampToValueAtTime(base * 1.28, now + 0.06);
+          bounce.frequency.exponentialRampToValueAtTime(base * 0.96, now + 0.14);
+          bounceGain.gain.setValueAtTime(0.0001, now);
+          bounceGain.gain.exponentialRampToValueAtTime(0.10, now + 0.012);
+          bounceGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+
+          wobble.type = "triangle";
+          wobble.frequency.setValueAtTime(base * 1.36, now + 0.018);
+          wobble.frequency.exponentialRampToValueAtTime(base * 0.86, now + 0.12);
+          wobbleGain.gain.setValueAtTime(0.0001, now + 0.015);
+          wobbleGain.gain.exponentialRampToValueAtTime(0.045, now + 0.035);
+          wobbleGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+
+          bounce.connect(bounceGain);
+          wobble.connect(wobbleGain);
+          bounceGain.connect(filter);
+          wobbleGain.connect(filter);
+          filter.connect(audioCtx.destination);
+          bounce.start(now);
+          wobble.start(now + 0.015);
+          bounce.stop(now + 0.2);
+          wobble.stop(now + 0.18);
+
+          var sampleRate = audioCtx.sampleRate;
+          var length = Math.floor(sampleRate * 0.035);
+          var buffer = audioCtx.createBuffer(1, length, sampleRate);
+          var data = buffer.getChannelData(0);
+          for (var i = 0; i < length; i++) {
+            var t = i / length;
+            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 5);
+          }
+
+          var squish = audioCtx.createBufferSource();
+          var squishGain = audioCtx.createGain();
+          var squishFilter = audioCtx.createBiquadFilter();
+          squish.buffer = buffer;
+          squishFilter.type = "bandpass";
+          squishFilter.frequency.setValueAtTime(620, now);
+          squishFilter.Q.setValueAtTime(1.2, now);
+          squishGain.gain.setValueAtTime(0.0001, now);
+          squishGain.gain.exponentialRampToValueAtTime(0.035, now + 0.006);
+          squishGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+          squish.connect(squishFilter);
+          squishFilter.connect(squishGain);
+          squishGain.connect(audioCtx.destination);
+          squish.start(now);
+          squish.stop(now + 0.05);
         } catch (error) {}
       }
 
