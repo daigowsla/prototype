@@ -19,6 +19,13 @@
       --accent: #2f8f6b;
       --danger: #d84c3f;
       --gold: #d79b38;
+      --game-width: 372px;
+      --game-height: 493px;
+      --stage-width: 376px;
+      --stage-height: 497px;
+      --app-width: 390px;
+      --app-height: 671px;
+      --app-scale: 1;
     }
 
     * {
@@ -49,6 +56,8 @@
       height: 100vh;
       height: 100dvh;
       padding: 0;
+      display: grid;
+      place-items: center;
       background:
         radial-gradient(circle at 18% 12%, rgba(129, 177, 112, 0.28), transparent 24%),
         radial-gradient(circle at 82% 88%, rgba(218, 172, 91, 0.28), transparent 25%),
@@ -56,33 +65,25 @@
     }
 
     body.standalone-mode {
-      display: grid;
-      place-items: center;
-      padding:
-        env(safe-area-inset-top)
-        env(safe-area-inset-right)
-        env(safe-area-inset-bottom)
-        env(safe-area-inset-left);
+      padding: 0;
     }
 
     .app {
-      width: min(100%, 520px);
-      height: 100%;
+      width: var(--app-width);
+      height: var(--app-height);
       min-height: 0;
       margin: 0 auto;
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
+      grid-template-rows: auto var(--stage-height) auto;
       gap: 6px;
-      padding:
-        calc(7px + env(safe-area-inset-top))
-        calc(7px + env(safe-area-inset-right))
-        calc(8px + env(safe-area-inset-bottom))
-        calc(7px + env(safe-area-inset-left));
+      padding: 7px 7px 8px;
+      transform: scale(var(--app-scale));
+      transform-origin: center;
     }
 
     body.standalone-mode .app {
-      height: var(--standalone-app-height, min(100%, 680px));
-      max-height: 100%;
+      height: var(--app-height);
+      max-height: none;
       padding: 7px 7px 8px;
     }
 
@@ -122,7 +123,7 @@
     .metric strong {
       display: block;
       margin-top: 3px;
-      font-size: clamp(20px, 5.5vw, 28px);
+      font-size: 28px;
       line-height: 1;
       font-variant-numeric: tabular-nums;
     }
@@ -156,6 +157,8 @@
 
     .stage {
       position: relative;
+      width: var(--stage-width);
+      height: var(--stage-height);
       min-height: 0;
       overflow: hidden;
       border: 2px solid rgba(51, 39, 31, 0.82);
@@ -233,7 +236,7 @@
 
     .rankbox h2 {
       margin: 0;
-      font-size: 10px;
+      font-size: 9px;
       line-height: 1;
       letter-spacing: 0;
     }
@@ -258,7 +261,7 @@
 
     .rank-place {
       display: block;
-      font-size: 9px;
+      font-size: 10px;
       line-height: 1.1;
       color: rgba(42, 33, 27, 0.62);
       font-weight: 800;
@@ -331,38 +334,6 @@
       cursor: pointer;
     }
 
-    @media (max-height: 740px) {
-      .app {
-        gap: 4px;
-        padding:
-          calc(5px + env(safe-area-inset-top))
-          calc(5px + env(safe-area-inset-right))
-          calc(6px + env(safe-area-inset-bottom))
-          calc(5px + env(safe-area-inset-left));
-      }
-
-      .scorebox,
-      .nextbox {
-        min-height: 48px;
-        padding: 5px 7px;
-      }
-
-      .rankbox {
-        min-height: 46px;
-      }
-
-      .metric strong {
-        font-size: 20px;
-      }
-
-      .rank-place {
-        font-size: 10px;
-      }
-
-      .rank-score {
-        font-size: 12px;
-      }
-    }
   </style>
 </head>
 <body>
@@ -399,7 +370,7 @@
         <div class="dialog">
           <h1>GAME OVER</h1>
           <p id="finalScore">SCORE 0</p>
-          <button id="againButton" type="button">もう一度</button>
+          <button id="againButton" type="button">RETRY</button>
         </div>
       </div>
     </section>
@@ -427,7 +398,10 @@
       var SCORES = [1, 3, 6, 10, 15, 21, 30, 45, 66, 96, 140, 220];
       var STORAGE_KEY = "caudex-suika-ranking-v1";
       var BEST_KEY = "caudex-suika-best-v1";
-      var SAFARI_HEIGHT_KEY = "botabom-safari-viewport-height-v1";
+      var GAME_WIDTH = 372;
+      var GAME_HEIGHT = 493;
+      var BASE_APP_WIDTH = 390;
+      var BASE_APP_HEIGHT = 671;
       var FLOOR_INSET = 8;
 
       var stage = document.getElementById("stage");
@@ -607,38 +581,21 @@
         return Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
       }
 
+      function viewportWidth() {
+        return Math.round(window.visualViewport ? window.visualViewport.width : window.innerWidth);
+      }
+
       function configureDisplayMode() {
         if (standaloneMode) {
           document.body.classList.add("standalone-mode");
-          var savedHeight = 0;
-          try {
-            savedHeight = Number(localStorage.getItem(SAFARI_HEIGHT_KEY) || 0);
-          } catch (error) {}
-
-          var fallbackHeight = Math.round(Math.min(
-            window.innerWidth * 1.72,
-            Math.max(420, window.screen.height - 150)
-          ));
-          var availableHeight = window.innerHeight -
-            parseFloat(getComputedStyle(document.body).paddingTop || 0) -
-            parseFloat(getComputedStyle(document.body).paddingBottom || 0);
-          var targetHeight = Math.min(
-            Math.max(320, availableHeight),
-            Math.max(320, savedHeight || fallbackHeight)
-          );
-          document.documentElement.style.setProperty("--standalone-app-height", targetHeight + "px");
-          return;
         }
 
-        var currentHeight = viewportHeight();
-        if (window.innerHeight >= window.innerWidth && currentHeight > 420) {
-          try {
-            var previousHeight = Number(localStorage.getItem(SAFARI_HEIGHT_KEY) || 0);
-            if (!previousHeight || currentHeight < previousHeight) {
-              localStorage.setItem(SAFARI_HEIGHT_KEY, String(currentHeight));
-            }
-          } catch (error) {}
-        }
+        var scale = Math.min(
+          1,
+          viewportWidth() / BASE_APP_WIDTH,
+          viewportHeight() / BASE_APP_HEIGHT
+        );
+        document.documentElement.style.setProperty("--app-scale", Math.max(0.1, scale).toFixed(4));
       }
 
       function handleViewportChange() {
@@ -647,9 +604,8 @@
       }
 
       function resize() {
-        var rect = canvas.getBoundingClientRect();
-        width = Math.floor(rect.width);
-        height = Math.floor(rect.height);
+        width = GAME_WIDTH;
+        height = GAME_HEIGHT;
         dropX = clamp(dropX || width / 2, currentRadius() + 8, width - currentRadius() - 8);
 
         render.options.width = width;
@@ -1108,7 +1064,7 @@
 
         bgmGain = audioCtx.createGain();
         bgmGain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-        bgmGain.gain.exponentialRampToValueAtTime(0.19, audioCtx.currentTime + 0.35);
+        bgmGain.gain.exponentialRampToValueAtTime(0.38, audioCtx.currentTime + 0.35);
         bgmGain.connect(audioCtx.destination);
         bgmStep = 0;
         bgmNextTime = audioCtx.currentTime + 0.06;
